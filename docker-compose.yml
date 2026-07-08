@@ -1,0 +1,26 @@
+# Optional: only needed if you want to deploy this to a shared VPS later.
+# For local single-machine use, running backend/frontend directly with
+# uvicorn + vite (see README) is simpler and just as free.
+#
+# Only the frontend's port 80 is published -- it serves the built app and
+# reverse-proxies /api to the backend container internally (see
+# frontend/nginx.conf), so visiting the server's IP/domain is the whole
+# experience: no second port, no CORS, nothing else to open.
+services:
+  backend:
+    build: ./backend
+    expose:
+      - "8000"
+    env_file:
+      - .env
+    volumes:
+      - ./backend/data:/app/data
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

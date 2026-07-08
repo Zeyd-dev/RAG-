@@ -1,0 +1,37 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+pydantic==2.9.2
+pydantic-settings==2.5.2
+
+# sentence-transformers pulls in torch as a dependency, and without this
+# pin pip resolves the default CUDA-enabled build -- torch itself plus the
+# nvidia-cublas/cudnn/cuda-toolkit wheels it drags in add several GB to the
+# image for a Space that only ever runs on CPU. That bloat is almost
+# certainly why the Space failed to deploy with "Scheduling failure:
+# unable to schedule" -- pinning to the CPU-only wheel keeps the image
+# small enough to actually get scheduled.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.4.1
+sentence-transformers==3.1.1
+chromadb==0.5.15
+groq==0.11.0
+httpx==0.27.2  # groq==0.11.0 still passes 'proxies' to httpx.Client, which httpx>=0.28 removed
+pypdf==5.0.1
+python-docx==1.1.2
+fpdf2==2.8.7
+markdown==3.7
+tiktoken==0.8.0
+itsdangerous==2.2.0
+python-dotenv==1.0.1
+
+# Optional Supabase backend (Postgres + pgvector metadata/vector store,
+# Supabase Storage for files) -- only imported/used when DATABASE_URL
+# points at Postgres and/or SUPABASE_URL+SUPABASE_KEY are set, see
+# backend/app/db.py and backend/app/storage/factory.py. A plain local
+# sqlite + Chroma + local-disk install never touches these. Deliberately
+# NOT using the official `supabase` package for Storage -- it pulls its
+# own httpx version constraint, and storage/supabase_storage.py talks to
+# the Storage REST API directly over the httpx already pinned above
+# instead, avoiding a second version-conflict risk like the groq one.
+psycopg2-binary==2.9.9
