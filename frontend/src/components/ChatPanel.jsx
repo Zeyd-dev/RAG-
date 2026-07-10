@@ -2,46 +2,29 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "../api/client.js";
-import CitationChip from "./CitationChip.jsx";
-import SourceViewer from "./SourceViewer.jsx";
 
-const CITATION_TOKEN = /\[S(\d+)\]/g;
+const CITATION_TOKEN = /\s*\[S\d+\]/g;
 
 /**
  * The model writes citations as plain "[S1]" tokens in its answer text.
- * Before handing the text to the Markdown renderer, rewrite each token into
- * a Markdown link with a fake "citation:" scheme -- e.g. "[S2]" becomes
- * "[2](citation:2)". Markdown parses that into a normal link node, and the
- * custom `a` renderer below (see mdComponents) intercepts anything with a
- * "citation:" href and swaps in a <CitationChip> instead of a real link.
- * This lets citation chips and Markdown formatting (tables, bold, lists)
- * coexist without hand-rolling a second parser: one pass of standard
- * Markdown parsing handles both.
+ * Clickable inline citation chips + the source viewer were removed (the
+ * "open source document" link intermittently opened a login/auth tab
+ * instead of the actual passage, and wasn't reliable enough to keep) --
+ * so these tokens are now just stripped out before rendering rather than
+ * turned into links. The underlying citation data still flows through to
+ * the Word/PDF export, which lists sources as plain text.
  */
-function injectCitationLinks(content) {
-  return content.replace(CITATION_TOKEN, (_match, num) => `[${num}](citation:${num})`);
+function stripCitationTokens(content) {
+  return content.replace(CITATION_TOKEN, "");
 }
 
-function mdComponents(citations, onCitationClick) {
+function mdComponents() {
   return {
-    a: ({ href, children }) => {
-      if (href && href.startsWith("citation:")) {
-        const idx = Number(href.slice("citation:".length));
-        const citation = citations[idx - 1];
-        if (citation) {
-          return <CitationChip index={idx} citation={citation} onClick={onCitationClick} />;
-        }
-        // Model cited a source number that doesn't exist among what was
-        // retrieved (a real LLM failure mode) -- fall back to showing the
-        // literal text rather than breaking the render.
-        return <span>[S{idx}]</span>;
-      }
-      return (
-        <a href={href} target="_blank" rel="noreferrer" className="underline text-brand-700 hover:text-brand-800">
-          {children}
-        </a>
-      );
-    },
+    a: ({ href, children }) => (
+      <a href={href} target="_blank" rel="noreferrer" className="underline text-brand-700 hover:text-brand-800">
+        {children}
+      </a>
+    ),
     p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
     strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
     ul: ({ children }) => <ul className="list-disc list-outside pl-5 mb-2 space-y-1 last:mb-0">{children}</ul>,
@@ -76,52 +59,11 @@ function mdComponents(citations, onCitationClick) {
   };
 }
 
-function renderAnswer(content, citations, onCitationClick) {
+function renderAnswer(content) {
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents(citations, onCitationClick)}>
-      {injectCitationLinks(content)}
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents()}>
+      {stripCitationTokens(content)}
     </ReactMarkdown>
-  );
-}
-
-/**
- * Shows every chunk that was actually retrieved and sent to the LLM for
- * this answer -- not just the ones the model chose to cite inline. Useful
- * for evaluating retrieval quality separately from generation quality: a
- * wrong or incomplete answer might still have retrieved the right chunk
- * (a generation problem), or the right chunk might never have been
- * retrieved at all (a retrieval problem) -- this panel is how you tell
- * the two apart.
- */
-function RetrievedSources({ citations, onSelect }) {
-  if (!citations || citations.length === 0) return null;
-  return (
-    <details className="mt-1.5 text-xs text-slate-500 w-full">
-      <summary className="cursor-pointer select-none hover:text-slate-700">
-        Retrieved sources ({citations.length})
-      </summary>
-      <ul className="mt-2 space-y-1.5">
-        {citations.map((c, i) => (
-          <li key={c.chunk_id}>
-            <button
-              onClick={() => onSelect(c)}
-              className="w-full text-left bg-white border border-slate-200 rounded-md px-2 py-1.5 hover:border-brand-300 transition-colors"
-            >
-              <div className="flex justify-between gap-2">
-                <span className="font-medium text-slate-700 truncate">
-                  {i + 1}. {c.filename}
-                  {c.page != null ? ` · p.${c.page}` : ""}
-                </span>
-                <span className="text-slate-400 shrink-0">
-                  ~{Math.max(0, Math.round(c.score * 100))}% relevance
-                </span>
-              </div>
-              <div className="text-slate-500 truncate">{c.text}</div>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </details>
   );
 }
 
@@ -167,7 +109,6 @@ export default function ChatPanel({ notebookId }) {
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [activeCitation, setActiveCitation] = useState(null);
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -206,8 +147,7 @@ export default function ChatPanel({ notebookId }) {
       <div className="flex-1 overflow-y-auto space-y-4 pr-1">
         {messages.length === 0 && (
           <p className="text-xs text-slate-400">
-            Ask a question about the documents in this notebook. Sources are linked
-            automatically — hover or click a marker to see exactly where an answer came from.
+            Ask a question about the documents in this notebook.
           </p>
         )}
         {messages.map((m, i) => (
@@ -219,15 +159,10 @@ export default function ChatPanel({ notebookId }) {
                   : "bg-slate-100 text-slate-800 text-left"
               }`}
             >
-              {m.role === "assistant"
-                ? renderAnswer(m.content, m.citations || [], setActiveCitation)
-                : m.content}
+              {m.role === "assistant" ? renderAnswer(m.content) : m.content}
             </div>
             {m.role === "assistant" && (
-              <>
-                <ExportButton notebookId={notebookId} content={m.content} citations={m.citations || []} />
-                <RetrievedSources citations={m.citations} onSelect={setActiveCitation} />
-              </>
+              <ExportButton notebookId={notebookId} content={m.content} citations={m.citations || []} />
             )}
           </div>
         ))}
@@ -251,12 +186,6 @@ export default function ChatPanel({ notebookId }) {
           Send
         </button>
       </form>
-
-      <SourceViewer
-        notebookId={notebookId}
-        citation={activeCitation}
-        onClose={() => setActiveCitation(null)}
-      />
     </div>
   );
 }
