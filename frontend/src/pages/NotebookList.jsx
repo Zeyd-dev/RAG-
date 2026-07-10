@@ -112,7 +112,7 @@ export default function NotebookList({ onLogout }) {
                 onClick={() => handleDelete(nb.id)}
                 aria-label={`Delete ${nb.name}`}
                 title="Delete notebook"
-                className="shrink-0 text-slate-300 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                className="shrink-0 text-slate-400 hover:text-red-600 transition-colors opacity-60 group-hover:opacity-100"
               >
                 <svg viewBox="0 0 20 20" fill="currentColor" className="h-4.5 w-4.5">
                   <path

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client.js";
 import ChatPanel from "../components/ChatPanel.jsx";
 import Logo from "../components/Logo.jsx";
@@ -45,6 +45,47 @@ function ReportButton({ notebookId }) {
   );
 }
 
+function DeleteNotebookButton({ notebookId, notebookName }) {
+  const navigate = useNavigate();
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleClick = async () => {
+    if (deleting) return;
+    if (!confirm(`Delete "${notebookName}" and all its documents? This can't be undone.`)) return;
+    setDeleting(true);
+    setError("");
+    try {
+      await api.deleteNotebook(notebookId);
+      navigate("/");
+    } catch (err) {
+      setError(err.message);
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <button
+        onClick={handleClick}
+        disabled={deleting}
+        title="Delete notebook"
+        className="inline-flex items-center gap-1.5 border border-slate-200 text-slate-500 rounded-lg px-3.5 py-2 text-sm font-medium hover:border-red-300 hover:text-red-600 disabled:opacity-50 transition-colors shrink-0"
+      >
+        <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+          <path
+            fillRule="evenodd"
+            d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482 41.03 41.03 0 0 0-2.365-.298V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4Z"
+            clipRule="evenodd"
+          />
+        </svg>
+        {deleting ? "Deleting..." : "Delete notebook"}
+      </button>
+      {error && <span className="text-xs text-red-600">{error}</span>}
+    </div>
+  );
+}
+
 export default function NotebookView({ onLogout }) {
   const { notebookId } = useParams();
   const [notebook, setNotebook] = useState(null);
@@ -82,7 +123,12 @@ export default function NotebookView({ onLogout }) {
               <p className="text-sm text-slate-500 mt-0.5">{notebook.description}</p>
             )}
           </div>
-          {notebook && <ReportButton notebookId={notebookId} />}
+          {notebook && (
+            <div className="flex items-start gap-2 shrink-0">
+              <ReportButton notebookId={notebookId} />
+              <DeleteNotebookButton notebookId={notebookId} notebookName={notebook.name} />
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-5">
